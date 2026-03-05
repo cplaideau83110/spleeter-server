@@ -6,6 +6,8 @@ WORKDIR /app
 
 RUN pip install --no-cache-dir \
     protobuf==3.20.3 \
+    markupsafe==2.0.1 \
+    jinja2==2.11.3 \
     click==7.1.2 \
     typer==0.3.2 \
     werkzeug==1.0.1 \
