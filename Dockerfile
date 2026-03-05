@@ -6,6 +6,7 @@ RUN apt-get update && apt-get install -y ffmpeg && rm -rf /var/lib/apt/lists/*
 
 COPY requirements.txt .
 RUN pip install Flask==2.2.0 Werkzeug==2.2.0 flask-cors==4.0.0 pydub==0.25.1 requests==2.31.0 numpy==1.19.5 librosa==0.8.0 tensorflow==2.5.0 pandas==1.1.5 ffmpeg-python==0.2.0 httpx==0.19.0 h2==4.1.0 && \
+    pip install typer==0.3.2 && \
     pip install --no-deps spleeter==2.3.0 && \
     pip install norbert==0.2.1
 
