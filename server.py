@@ -1,5 +1,6 @@
 import os
 import requests
+import base64
 from flask import Flask, request, jsonify
 from flask_cors import CORS
 import threading
@@ -65,17 +66,24 @@ def upload_stem_file(stem_path, filename):
         file_size = os.path.getsize(stem_path)
         print(f"    📦 Fichier: {file_size / 1024 / 1024:.1f} MB")
         
+        # Lire et encoder en base64
         with open(stem_path, 'rb') as f:
-            files = {'file': (filename, f, 'audio/mpeg')}
-            url = f"{BASE44_API_URL}/{BASE44_APP_ID}/files/upload"
-            print(f"    🌐 Upload...")
-            response = requests.post(url, files=files, timeout=30)
-            print(f"    📊 Status: {response.status_code}")
-            response.raise_for_status()
-            data = response.json()
-            file_url = data.get('file_url')
-            print(f"    ✓ URL: {file_url}")
-            return file_url
+            file_b64 = base64.b64encode(f.read()).decode('utf-8')
+        
+        # Appeler la fonction backend Base44
+        url = f"{BASE44_API_URL}/{BASE44_APP_ID}/functions/uploadStem"
+        print(f"    🌐 Upload via Base44...")
+        response = requests.post(
+            url,
+            json={"file_b64": file_b64, "filename": filename},
+            timeout=30
+        )
+        print(f"    📊 Status: {response.status_code}")
+        response.raise_for_status()
+        data = response.json()
+        file_url = data.get('file_url')
+        print(f"    ✓ URL: {file_url}")
+        return file_url
     except Exception as e:
         print(f"    ✗ Exception: {type(e).__name__}: {e}")
         import traceback
