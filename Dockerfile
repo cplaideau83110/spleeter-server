@@ -6,12 +6,12 @@ WORKDIR /app
 
 RUN pip install --no-cache-dir \
     protobuf==3.20.3 \
-    tensorflow==2.12.0 \
+    tensorflow==2.12.1 \
     werkzeug==2.2.3 \
     flask==2.2.5 \
     flask-cors==3.0.10 \
     requests \
-    spleeter
+    spleeter==2.4.2
 
 COPY server.py .
 
