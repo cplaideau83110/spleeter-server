@@ -43,17 +43,29 @@ def update_separation(separation_id, data):
 
 def upload_stem_file(stem_path, filename):
     try:
+        print(f"    🔍 Vérification: {stem_path}")
+        if not os.path.exists(stem_path):
+            print(f"    ❌ Fichier n'existe pas!")
+            return None
+        
+        file_size = os.path.getsize(stem_path)
+        print(f"    📦 Fichier: {file_size / 1024 / 1024:.1f} MB")
+        
         with open(stem_path, 'rb') as f:
             files = {'file': (filename, f, 'audio/wav')}
             url = f"{BASE44_API_URL}/{BASE44_APP_ID}/files/upload"
+            print(f"    🌐 URL: {url}")
             response = requests.post(url, files=files, timeout=30)
+            print(f"    📊 Status: {response.status_code}")
             response.raise_for_status()
             data = response.json()
             file_url = data.get('file_url')
-            print(f"  ✓ URL: {file_url}")
+            print(f"    ✓ URL: {file_url}")
             return file_url
     except Exception as e:
-        print(f"  ✗ Échec upload {filename}: {e}")
+        print(f"    ✗ Exception: {type(e).__name__}: {e}")
+        import traceback
+        traceback.print_exc()
         return None
 
 def process_separation(file_url, mode, separation_id):
