@@ -12,7 +12,30 @@ import tempfile
 from flask_cors import CORS
 
 app = Flask(__name__)
-CORS(app)  # ← AJOUTE CETTE LIGNE
+CORS(app)
+
+# PRÉ-CHARGE LES MODÈLES AU DÉMARRAGE
+print("⏳ Pré-chargement des modèles Spleeter...", flush=True)
+separator_cache = {}
+try:
+    separator_cache['2stems'] = Separator('spleeter:2stems')
+    print("✓ Modèle 2stems prêt", flush=True)
+except Exception as e:
+    print(f"⚠️ Erreur chargement 2stems: {e}", flush=True)
+
+try:
+    separator_cache['4stems'] = Separator('spleeter:4stems')
+    print("✓ Modèle 4stems prêt", flush=True)
+except Exception as e:
+    print(f"⚠️ Erreur chargement 4stems: {e}", flush=True)
+
+try:
+    separator_cache['5stems'] = Separator('spleeter:5stems')
+    print("✓ Modèle 5stems prêt", flush=True)
+except Exception as e:
+    print(f"⚠️ Erreur chargement 5stems: {e}", flush=True)
+
+print("✅ Tous les modèles prêts!", flush=True)
 
 UPLOAD_FOLDER = tempfile.gettempdir()
 ALLOWED_EXTENSIONS = {'mp3', 'wav', 'flac', 'ogg'}
@@ -35,14 +58,19 @@ def set_progress(separation_id, progress, step=""):
     print(f"📊 {separation_id}: {progress}% - {step}", flush=True)
 
 def get_separator(stems):
-    """Initialise et retourne un séparateur Spleeter"""
-    print(f"⚙️ Chargement modèle {stems}stems...", flush=True)
-    return Separator(f'spleeter:{stems}stems')
+    """Retourne un séparateur Spleeter (depuis le cache)"""
+    key = f'{stems}stems'
+    if key in separator_cache:
+        print(f"✓ Séparateur {key} utilisé depuis le cache", flush=True)
+        return separator_cache[key]
+    print(f"⚠️ Séparateur {key} pas en cache, chargement...", flush=True)
+    separator_cache[key] = Separator(f'spleeter:{key}')
+    return separator_cache[key]
 
 def allowed_file(filename):
     return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
 
-@app.route('/separate', methods=['POST', 'OPTIONS'])  # ← AJOUTE OPTIONS
+@app.route('/separate', methods=['POST', 'OPTIONS'])
 def separate():
     if request.method == 'OPTIONS':
         return '', 200
@@ -77,9 +105,9 @@ def separate():
 
         set_progress(separation_id, 15, "Analyse de la piste audio")
 
-        # Charge le séparateur Spleeter
+        # Charge le séparateur Spleeter (depuis le cache)
         stem_count = 2 if mode == "2stems" else 4 if mode == "4stems" else 5
-        print(f"⚙️ Initialisation Spleeter {stem_count}stems...", flush=True)
+        print(f"⚙️ Utilisation Spleeter {stem_count}stems...", flush=True)
         separator = get_separator(stem_count)
         print(f"✓ Séparateur prêt ({stem_count} stems)", flush=True)
 
