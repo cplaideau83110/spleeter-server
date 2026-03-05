@@ -8,13 +8,9 @@ from pathlib import Path
 import shutil
 import gc
 from pydub import AudioSegment
-import json
 
 app = Flask(__name__)
 CORS(app, resources={r"/*": {"origins": "*"}})
-
-BASE44_APP_ID = os.environ.get("BASE44_APP_ID", "69a8f857a6a0fa216be33357")
-BASE44_API_URL = "https://api.base44.com/api/apps"
 
 progress_store = {}
 SEPARATOR = None
@@ -31,18 +27,6 @@ def get_separator(stem_count):
 def set_progress(separation_id, progress, step):
     progress_store[separation_id] = {"progress": progress, "step": step}
     print(f"[{progress}%] {step}", flush=True)
-
-def update_separation(separation_id, data):
-    url = f"{BASE44_API_URL}/{BASE44_APP_ID}/entities/Separation/{separation_id}"
-    headers = {"Content-Type": "application/json"}
-    try:
-        response = requests.patch(url, json=data, headers=headers, timeout=10)
-        response.raise_for_status()
-        print(f"✓ Base44 mis à jour: {json.dumps(data)}", flush=True)
-        return True
-    except Exception as e:
-        print(f"✗ Erreur update Base44: {e}", flush=True)
-        return False
 
 def convert_wav_to_mp3(wav_path, mp3_path):
     try:
@@ -107,24 +91,23 @@ def process_separation(file_url, mode, separation_id):
             convert_wav_to_mp3(str(stem_file), str(mp3_path))
         print("", flush=True)
         
-        set_progress(separation_id, 90, "Finalisation")
-        print(f"💾 Enregistrement en base...", flush=True)
-        success = update_separation(separation_id, {
+        set_progress(separation_id, 100, "Terminé !")
+        # Stocke le résultat final dans progress_store
+        progress_store[separation_id] = {
+            "progress": 100,
+            "step": "Terminé !",
             "status": "done",
             "detected_stems": detected_stems
-        })
-        
-        if success:
-            set_progress(separation_id, 100, "Terminé !")
-            print(f"✓✓✓ SUCCÈS !\n", flush=True)
-            print(f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n", flush=True)
+        }
+        print(f"✓✓✓ SUCCÈS !\n", flush=True)
+        print(f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n", flush=True)
         
     except Exception as e:
         print(f"\n✗✗✗ ERREUR: {e}\n", flush=True)
         import traceback
         traceback.print_exc(file=sys.stdout)
-        set_progress(separation_id, 0, "Erreur")
-        update_separation(separation_id, {"status": "error"})
+        # Stocke l'erreur
+        progress_store[separation_id] = {"progress": 0, "step": "Erreur", "status": "error"}
     
     finally:
         if local_path and os.path.exists(local_path):
@@ -150,11 +133,10 @@ def separate():
 
 @app.route("/progress/<separation_id>", methods=["GET"])
 def get_progress(separation_id):
-    return jsonify(progress_store.get(separation_id, {"progress": 0, "step": "Attente"}))
+    return jsonify(progress_store.get(separation_id, {"progress": 0, "step": "Attente", "status": "pending"}))
 
 @app.route("/stems/<separation_id>/<stem_name>.mp3", methods=["GET"])
 def get_stem(separation_id, stem_name):
-    # Cherche le fichier MP3 au bon endroit
     stems_dir = Path(f"/tmp/output_{separation_id}") / separation_id
     stem_path = stems_dir / f"{stem_name}.mp3"
     
