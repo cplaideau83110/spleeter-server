@@ -2,36 +2,42 @@ FROM python:3.8
 
 WORKDIR /app
 
-# Installer ffmpeg
 RUN apt-get update && apt-get install -y ffmpeg && rm -rf /var/lib/apt/lists/*
 
-# Copier et installer les dépendances Python
 COPY requirements.txt .
-RUN pip install --no-deps spleeter==2.3.0 && pip install Flask==2.2.0 Werkzeug==2.2.0 flask-cors==4.0.0 pydub==0.25.1 requests==2.31.0 numpy librosa tensorflow==2.5.0 pandas typer==0.9.0 ffmpeg-python "httpx[http2]"
+RUN pip install -r requirements.txt
 
-# Pré-télécharger les modèles avec requests (gère les redirects)
-RUN mkdir -p /root/.spleeter/pretrained_models && python << 'EOF'
+COPY . .
+
+# Script pour pré-télécharger les modèles
+RUN mkdir -p /root/.cache/spleeter && python << 'EOF'
 import requests
 import tarfile
 import os
+from pathlib import Path
 
-models = ['2stems', '4stems', '5stems']
-for model in models:
+cache_dir = Path.home() / '.cache' / 'spleeter'
+cache_dir.mkdir(parents=True, exist_ok=True)
+
+for model in ['2stems', '4stems', '5stems']:
+    model_dir = cache_dir / model
+    if model_dir.exists():
+        print(f'✓ {model} déjà présent')
+        continue
+    
     url = f'https://github.com/deezer/spleeter/releases/download/v1.4.0/{model}.tar.gz'
-    path = f'/root/.spleeter/pretrained_models/{model}.tar.gz'
-    print(f'Téléchargement {model}...')
-    r = requests.get(url, allow_redirects=True)
-    with open(path, 'wb') as f:
-        f.write(r.content)
-    print(f'Extraction {model}...')
-    with tarfile.open(path) as tar:
-        tar.extractall('/root/.spleeter/pretrained_models/')
-    os.remove(path)
+    tar_path = cache_dir / f'{model}.tar.gz'
+    
+    print(f'📥 Téléchargement {model}...')
+    r = requests.get(url, allow_redirects=True, timeout=60)
+    r.raise_for_status()
+    tar_path.write_bytes(r.content)
+    
+    print(f'📦 Extraction {model}...')
+    with tarfile.open(tar_path) as tar:
+        tar.extractall(cache_dir)
+    tar_path.unlink()
     print(f'✓ {model} OK')
 EOF
 
-# Copier l'app
-COPY . .
-
-# Lancer l'app
 CMD ["python", "server.py"]
