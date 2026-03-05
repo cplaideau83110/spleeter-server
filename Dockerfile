@@ -1,22 +1,10 @@
-FROM python:3.8-slim
+FROM python:3.8
 
-RUN apt-get update && apt-get install -y ffmpeg libsndfile1
+RUN apt-get update && apt-get install -y ffmpeg
 
 WORKDIR /app
+COPY requirements.txt .
+RUN pip install -r requirements.txt
 
-RUN pip install --no-cache-dir \
-    protobuf==3.20.3 \
-    markupsafe==2.0.1 \
-    jinja2==2.11.3 \
-    click==7.1.2 \
-    typer==0.3.2 \
-    werkzeug==1.0.1 \
-    flask==1.1.4 \
-    flask-cors==3.0.10 \
-    requests \
-    tensorflow==2.12.1 \
-    spleeter==2.4.2
-
-COPY server.py .
-
+COPY . .
 CMD ["python", "server.py"]
