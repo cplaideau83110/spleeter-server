@@ -9,8 +9,11 @@ import librosa
 import soundfile as sf
 from pathlib import Path
 import tempfile
+from flask_cors import CORS
 
 app = Flask(__name__)
+CORS(app)  # ← AJOUTE CETTE LIGNE
+
 UPLOAD_FOLDER = tempfile.gettempdir()
 ALLOWED_EXTENSIONS = {'mp3', 'wav', 'flac', 'ogg'}
 
@@ -39,15 +42,19 @@ def get_separator(stems):
 def allowed_file(filename):
     return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
 
-@app.route('/separate', methods=['POST'])
+@app.route('/separate', methods=['POST', 'OPTIONS'])  # ← AJOUTE OPTIONS
 def separate():
+    if request.method == 'OPTIONS':
+        return '', 200
+    
     try:
         data = request.get_json()
         file_url = data.get('file_url')
         mode = data.get('mode', '4stems')
         separation_id = data.get('separation_id')
 
-        print(f"\n🎵 Séparation #{separation_id}", flush=True)
+        print(f"\n🎵 POST /separate reçu!", flush=True)
+        print(f"   Séparation #{separation_id}", flush=True)
         print(f"   Mode: {mode}", flush=True)
         print(f"   URL: {file_url}", flush=True)
 
@@ -109,14 +116,13 @@ def separate():
 
         set_progress(separation_id, 75, "Conversion en MP3")
 
-        # Convertit en MP3 et prépare les URLs
+        # Convertit en MP3
         for stem in detected_stems:
             wav_path = os.path.join(stems_dir, f"{stem}.wav")
             mp3_path = os.path.join(stems_dir, f"{stem}.mp3")
 
             print(f"   🔄 Conversion {stem}.wav → {stem}.mp3...", flush=True)
 
-            # Charge et réexporte en MP3
             try:
                 y, sr = librosa.load(wav_path, sr=None)
                 sf.write(mp3_path, y, sr, subtype='PCM_16')
@@ -127,7 +133,7 @@ def separate():
         progress_store[separation_id]["progress"] = 90
         progress_store[separation_id]["step"] = "Finalisation"
 
-        # Marque comme done après conversion
+        # Marque comme done
         progress_store[separation_id]["status"] = "done"
         print(f"✓ Séparation #{separation_id} complète!", flush=True)
 
@@ -151,8 +157,11 @@ def separate():
 @app.route('/progress/<separation_id>', methods=['GET'])
 def get_progress(separation_id):
     """Retourne le statut et les stems détectés"""
+    print(f"📥 GET /progress/{separation_id}", flush=True)
     if separation_id in progress_store:
+        print(f"✓ Trouvé: {progress_store[separation_id]}", flush=True)
         return jsonify(progress_store[separation_id]), 200
+    print(f"❌ Pas trouvé en mémoire", flush=True)
     return jsonify({"status": "not_found"}), 404
 
 @app.route('/stems/<separation_id>/<stem_name>.mp3', methods=['GET'])
@@ -160,14 +169,15 @@ def get_stem(separation_id, stem_name):
     """Télécharge un stem en MP3"""
     try:
         mp3_path = os.path.join(UPLOAD_FOLDER, f"output_{separation_id}", "temp_audio", f"{stem_name}.mp3")
+        print(f"📥 GET /stems/{separation_id}/{stem_name}.mp3 → {mp3_path}", flush=True)
         if os.path.exists(mp3_path):
-            print(f"📥 Téléchargement {stem_name}.mp3", flush=True)
+            print(f"✓ Fichier trouvé", flush=True)
             return send_file(mp3_path, mimetype='audio/mpeg', as_attachment=False)
         else:
-            print(f"❌ Fichier non trouvé: {mp3_path}", flush=True)
+            print(f"❌ Fichier non trouvé", flush=True)
             return jsonify({"error": "Fichier non trouvé"}), 404
     except Exception as e:
-        print(f"❌ Erreur téléchargement stem: {e}", flush=True)
+        print(f"❌ Erreur: {e}", flush=True)
         return jsonify({"error": str(e)}), 500
 
 if __name__ == '__main__':
