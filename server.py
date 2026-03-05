@@ -109,8 +109,12 @@ def separate():
 
         print(f"🔄 Séparation en cours...", flush=True)
         
+        stop_progress = {'value': False}
+
         def update_progress_thread():
             for i in range(26, 75, 5):
+                if stop_progress['value']:
+                    break
                 time.sleep(8)
                 set_progress(separation_id, i, "Séparation des instruments")
         
@@ -118,6 +122,7 @@ def separate():
         t.start()
 
         prediction = separator.separate_to_file(temp_audio, output_dir)
+        stop_progress['value'] = True
         print(f"✓ Séparation terminée", flush=True)
 
         stems_dir = os.path.join(output_dir, f"temp_{separation_id}")
