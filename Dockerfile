@@ -9,6 +9,9 @@ RUN apt-get update && apt-get install -y \
     build-essential \
     && rm -rf /var/lib/apt/lists/*
 
+# Crée le répertoire des modèles
+RUN mkdir -p /app/.spleeter
+
 # Copie requirements.txt
 COPY requirements.txt .
 
@@ -17,7 +20,7 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 # PRÉ-CHARGE LES MODÈLES SPLEETER
 ENV SPLEETER_MODELS_DIR=/app/.spleeter
-RUN python -c "from spleeter.separator import Separator; print('Pré-chargement 2stems...'); Separator('spleeter:2stems'); print('✓'); print('Pré-chargement 4stems...'); Separator('spleeter:4stems'); print('✓'); print('Pré-chargement 5stems...'); Separator('spleeter:5stems'); print('✓ Done!')"
+RUN python -c "import os; os.environ['SPLEETER_MODELS_DIR']='/app/.spleeter'; from spleeter.separator import Separator; print('Pré-chargement 2stems...'); Separator('spleeter:2stems'); print('✓'); print('Pré-chargement 4stems...'); Separator('spleeter:4stems'); print('✓'); print('Pré-chargement 5stems...'); Separator('spleeter:5stems'); print('✓ Done!')"
 
 # Copie le code
 COPY server.py .
