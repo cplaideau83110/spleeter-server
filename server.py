@@ -1,7 +1,7 @@
 import os
 import requests
 import base64
-from flask import Flask, request, jsonify
+from flask import Flask, request, jsonify, send_file
 from flask_cors import CORS
 import threading
 from pathlib import Path
@@ -56,40 +56,6 @@ def convert_wav_to_mp3(wav_path, mp3_path):
         print(f"    ✗ Erreur conversion: {e}")
         return False
 
-def upload_stem_file(stem_path, filename):
-    try:
-        print(f"    🔍 Vérification: {stem_path}")
-        if not os.path.exists(stem_path):
-            print(f"    ❌ Fichier n'existe pas!")
-            return None
-        
-        file_size = os.path.getsize(stem_path)
-        print(f"    📦 Fichier: {file_size / 1024 / 1024:.1f} MB")
-        
-        # Lire et encoder en base64
-        with open(stem_path, 'rb') as f:
-            file_b64 = base64.b64encode(f.read()).decode('utf-8')
-        
-        # Appeler la fonction backend Base44
-        url = f"{BASE44_API_URL}/{BASE44_APP_ID}/functions/uploadStem"
-        print(f"    🌐 Upload via Base44...")
-        response = requests.post(
-            url,
-            json={"file_b64": file_b64, "filename": filename},
-            timeout=30
-        )
-        print(f"    📊 Status: {response.status_code}")
-        response.raise_for_status()
-        data = response.json()
-        file_url = data.get('file_url')
-        print(f"    ✓ URL: {file_url}")
-        return file_url
-    except Exception as e:
-        print(f"    ✗ Exception: {type(e).__name__}: {e}")
-        import traceback
-        traceback.print_exc()
-        return None
-
 def process_separation(file_url, mode, separation_id):
     local_path = None
     output_dir = None
@@ -135,36 +101,15 @@ def process_separation(file_url, mode, separation_id):
         
         set_progress(separation_id, 75, "Conversion en MP3")
         print(f"🎚️ Conversion des pistes...")
-        mp3_files = {}
         for stem_file in stem_files:
-            stem_name = stem_file.stem
             mp3_path = stem_file.with_suffix('.mp3')
-            if convert_wav_to_mp3(str(stem_file), str(mp3_path)):
-                mp3_files[stem_name] = mp3_path
+            convert_wav_to_mp3(str(stem_file), str(mp3_path))
         print()
-        
-        set_progress(separation_id, 80, "Upload des pistes")
-        print(f"📤 Upload des fichiers MP3...")
-        stems = {}
-        for stem_name, mp3_path in mp3_files.items():
-            filename = f"{separation_id}_{stem_name}.mp3"
-            print(f"  📤 Upload {filename}...")
-            file_url = upload_stem_file(str(mp3_path), filename)
-            if file_url:
-                stems[stem_name] = file_url
-            else:
-                print(f"  ✗ Échec upload {filename}")
-        
-        if not stems:
-            print(f"❌ Aucun stem uploadé!")
-            raise Exception("Aucun stem uploadé")
-        print(f"✓ Upload terminé ({len(stems)} pistes)\n")
         
         set_progress(separation_id, 90, "Finalisation")
         print(f"💾 Enregistrement en base...")
         success = update_separation(separation_id, {
             "status": "done",
-            "stems": stems,
             "detected_stems": detected_stems
         })
         
@@ -184,10 +129,6 @@ def process_separation(file_url, mode, separation_id):
         if local_path and os.path.exists(local_path):
             os.remove(local_path)
             print(f"🧹 Fichier entrée supprimé")
-        
-        if output_dir and os.path.exists(output_dir):
-            shutil.rmtree(output_dir)
-            print(f"🧹 Dossier sortie supprimé")
         
         gc.collect()
         print(f"🧹 Mémoire libérée\n")
@@ -209,6 +150,13 @@ def separate():
 @app.route("/progress/<separation_id>", methods=["GET"])
 def get_progress(separation_id):
     return jsonify(progress_store.get(separation_id, {"progress": 0, "step": "Attente"}))
+
+@app.route("/stems/<separation_id>/<stem_name>.mp3", methods=["GET"])
+def get_stem(separation_id, stem_name):
+    stem_path = f"/tmp/output_{separation_id}/{separation_id}/{stem_name}.mp3"
+    if os.path.exists(stem_path):
+        return send_file(stem_path, mimetype="audio/mpeg")
+    return jsonify({"error": "Not found"}), 404
 
 @app.route("/health", methods=["GET"])
 def health():
