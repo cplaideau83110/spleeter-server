@@ -6,6 +6,7 @@ from flask_cors import CORS
 from spleeter.separator import Separator
 from pathlib import Path
 import json
+import threading
 
 app = Flask(__name__)
 CORS(app)
@@ -102,7 +103,8 @@ def process_separation(file_url, mode, separation_id):
             "detected_stems": detected_stems
         })
         
-        progress_store[separation_id] = {"progress": 100, "step": "Finalisation"}
+        # 100% SEULEMENT quand tout est vraiment terminé
+        progress_store[separation_id] = {"progress": 100, "step": "Terminé !"}
         print(f"✓ Séparation {separation_id} terminée")
         
     except Exception as e:
@@ -121,7 +123,6 @@ def separate():
         return jsonify({"error": "file_url et separation_id requis"}), 400
     
     # Lancer en arrière-plan
-    import threading
     thread = threading.Thread(target=process_separation, args=(file_url, mode, separation_id))
     thread.daemon = True
     thread.start()
