@@ -83,6 +83,10 @@ def process_separation(file_url, mode, separation_id):
         separator = get_separator(stem_count)
         print(f"✓ Séparateur prêt ({stem_count} stems)\n")
         
+        # Check espace disque
+        disk = shutil.disk_usage("/tmp")
+        print(f"📊 Espace disque /tmp: {disk.free / 1024 / 1024 / 1024:.2f} GB")
+        
         set_progress(separation_id, 35, "Séparation des instruments")
         print(f"🔊 Séparation en cours...")
         output_dir = f"/tmp/output_{separation_id}"
@@ -134,6 +138,8 @@ def process_separation(file_url, mode, separation_id):
         
     except Exception as e:
         print(f"\n✗✗✗ ERREUR: {e}\n")
+        import traceback
+        traceback.print_exc()
         set_progress(separation_id, 0, "Erreur")
         update_separation(separation_id, {"status": "error"})
     
