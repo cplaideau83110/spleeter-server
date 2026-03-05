@@ -113,16 +113,25 @@ def separate():
         separator = get_separator(stem_count)
         print(f"✓ Séparateur prêt ({stem_count} stems)", flush=True)
 
-        set_progress(separation_id, 25, "Séparation des instruments")
+       set_progress(separation_id, 25, "Séparation des instruments")
 
-        # Crée répertoire de sortie
-        output_dir = os.path.join(UPLOAD_FOLDER, f"output_{separation_id}")
-        os.makedirs(output_dir, exist_ok=True)
+# Crée répertoire de sortie
+output_dir = os.path.join(UPLOAD_FOLDER, f"output_{separation_id}")
+os.makedirs(output_dir, exist_ok=True)
 
-        # Sépare les pistes
-        print(f"🔄 Séparation en cours...", flush=True)
-        prediction = separator.separate_to_file(temp_audio, output_dir)
-        print(f"✓ Séparation terminée", flush=True)
+# Sépare les pistes
+print(f"🔄 Séparation en cours...", flush=True)
+import threading, time
+def update_progress():
+    for i in range(26, 75, 5):
+        time.sleep(8)
+        set_progress(separation_id, i, "Séparation des instruments")
+
+t = threading.Thread(target=update_progress, daemon=True)
+t.start()
+
+prediction = separator.separate_to_file(temp_audio, output_dir)
+print(f"✓ Séparation terminée", flush=True)
 
         # Liste les stems générés
         stems_dir = os.path.join(output_dir, "temp_audio")
