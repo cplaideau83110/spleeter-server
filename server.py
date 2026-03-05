@@ -24,7 +24,6 @@ def get_separator(stem_count):
     return SEPARATOR
 
 def set_progress(separation_id, progress, step):
-    """Met à jour la progression"""
     progress_store[separation_id] = {"progress": progress, "step": step}
     print(f"[{progress}%] {step}")
 
