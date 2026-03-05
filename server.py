@@ -3,6 +3,8 @@ os.environ['SPLEETER_MODELS_DIR'] = '/app/.spleeter'
 
 import json
 import logging
+import threading
+import time
 from flask import Flask, request, jsonify, send_file
 from werkzeug.utils import secure_filename
 import requests
@@ -40,8 +42,6 @@ except Exception as e:
 print("✅ Tous les modèles prêts!", flush=True)
 
 UPLOAD_FOLDER = tempfile.gettempdir()
-ALLOWED_EXTENSIONS = {'mp3', 'wav', 'flac', 'ogg'}
-
 app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
 app.config['MAX_CONTENT_LENGTH'] = 500 * 1024 * 1024
 
@@ -60,17 +60,12 @@ def set_progress(separation_id, progress, step=""):
     print(f"📊 {separation_id}: {progress}% - {step}", flush=True)
 
 def get_separator(stems):
-    """Retourne un séparateur Spleeter (depuis le cache)"""
     key = f'{stems}stems'
     if key in separator_cache:
         print(f"✓ Séparateur {key} utilisé depuis le cache", flush=True)
         return separator_cache[key]
-    print(f"⚠️ Séparateur {key} pas en cache, chargement...", flush=True)
     separator_cache[key] = Separator(f'spleeter:{key}')
     return separator_cache[key]
-
-def allowed_file(filename):
-    return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
 
 @app.route('/separate', methods=['POST', 'OPTIONS'])
 def separate():
@@ -86,97 +81,63 @@ def separate():
         print(f"\n🎵 POST /separate reçu!", flush=True)
         print(f"   Séparation #{separation_id}", flush=True)
         print(f"   Mode: {mode}", flush=True)
-        print(f"   URL: {file_url}", flush=True)
 
         if not all([file_url, separation_id]):
             return jsonify({"error": "Missing file_url or separation_id"}), 400
 
         set_progress(separation_id, 5, "Téléchargement du fichier")
 
-        # Télécharge le fichier
         response = requests.get(file_url, timeout=300)
         if response.status_code != 200:
             raise Exception(f"Impossible de télécharger le fichier (HTTP {response.status_code})")
 
-        # Sauvegarde temporaire
         temp_audio = os.path.join(UPLOAD_FOLDER, f"temp_{separation_id}.mp3")
         with open(temp_audio, 'wb') as f:
             f.write(response.content)
-        file_size = os.path.getsize(temp_audio) / (1024 * 1024)
-        print(f"✓ Fichier téléchargé: {file_size:.1f} MB", flush=True)
+        print(f"✓ Fichier téléchargé: {os.path.getsize(temp_audio) / (1024 * 1024):.1f} MB", flush=True)
 
         set_progress(separation_id, 15, "Analyse de la piste audio")
 
-        # Charge le séparateur Spleeter (depuis le cache)
         stem_count = 2 if mode == "2stems" else 4 if mode == "4stems" else 5
-        print(f"⚙️ Utilisation Spleeter {stem_count}stems...", flush=True)
         separator = get_separator(stem_count)
         print(f"✓ Séparateur prêt ({stem_count} stems)", flush=True)
 
-       set_progress(separation_id, 25, "Séparation des instruments")
+        set_progress(separation_id, 25, "Séparation des instruments")
 
-# Crée répertoire de sortie
-output_dir = os.path.join(UPLOAD_FOLDER, f"output_{separation_id}")
-os.makedirs(output_dir, exist_ok=True)
+        output_dir = os.path.join(UPLOAD_FOLDER, f"output_{separation_id}")
+        os.makedirs(output_dir, exist_ok=True)
 
-# Sépare les pistes
-print(f"🔄 Séparation en cours...", flush=True)
-import threading, time
-def update_progress():
-    for i in range(26, 75, 5):
-        time.sleep(8)
-        set_progress(separation_id, i, "Séparation des instruments")
+        print(f"🔄 Séparation en cours...", flush=True)
+        
+        def update_progress_thread():
+            for i in range(26, 75, 5):
+                time.sleep(8)
+                set_progress(separation_id, i, "Séparation des instruments")
+        
+        t = threading.Thread(target=update_progress_thread, daemon=True)
+        t.start()
 
-t = threading.Thread(target=update_progress, daemon=True)
-t.start()
+        prediction = separator.separate_to_file(temp_audio, output_dir)
+        print(f"✓ Séparation terminée", flush=True)
 
-prediction = separator.separate_to_file(temp_audio, output_dir)
-print(f"✓ Séparation terminée", flush=True)
+        stems_dir = os.path.join(output_dir, f"temp_{separation_id}")
+        detected_stems = sorted([f[:-4] for f in os.listdir(stems_dir) if f.endswith('.wav')]) if os.path.exists(stems_dir) else []
+        print(f"✓ Stems détectés: {detected_stems}", flush=True)
 
-        # Liste les stems générés
-        stems_dir = os.path.join(output_dir, "temp_audio")
-        detected_stems = []
-        if os.path.exists(stems_dir):
-            wav_files = [f[:-4] for f in os.listdir(stems_dir) if f.endswith('.wav')]
-            detected_stems = sorted(wav_files)
-            print(f"✓ Stems détectés: {detected_stems}", flush=True)
-        else:
-            print(f"⚠️ Répertoire de sortie non trouvé: {stems_dir}", flush=True)
-            return jsonify({"error": "Séparation échouée"}), 500
-
-        # Met à jour le statut avec les stems détectés
-        progress_store[separation_id] = {
-            "progress": 50,
-            "step": "Génération des pistes",
-            "status": "processing",
-            "detected_stems": detected_stems
-        }
-        print(f"📊 Stems détectés stockés: {detected_stems}", flush=True)
-
+        progress_store[separation_id]["detected_stems"] = detected_stems
         set_progress(separation_id, 75, "Conversion en MP3")
 
-        # Convertit en MP3
         for stem in detected_stems:
             wav_path = os.path.join(stems_dir, f"{stem}.wav")
             mp3_path = os.path.join(stems_dir, f"{stem}.mp3")
+            y, sr = librosa.load(wav_path, sr=None)
+            sf.write(mp3_path, y, sr, subtype='PCM_16')
+            print(f"   ✓ {stem}.mp3 créé", flush=True)
 
-            print(f"   🔄 Conversion {stem}.wav → {stem}.mp3...", flush=True)
-
-            try:
-                y, sr = librosa.load(wav_path, sr=None)
-                sf.write(mp3_path, y, sr, subtype='PCM_16')
-                print(f"   ✓ {stem}.mp3 créé", flush=True)
-            except Exception as e:
-                print(f"   ❌ Erreur conversion {stem}: {e}", flush=True)
-
-        progress_store[separation_id]["progress"] = 90
-        progress_store[separation_id]["step"] = "Finalisation"
-
-        # Marque comme done
+        progress_store[separation_id]["progress"] = 100
         progress_store[separation_id]["status"] = "done"
         print(f"✓ Séparation #{separation_id} complète!", flush=True)
 
-        # Nettoyage
         if os.path.exists(temp_audio):
             os.remove(temp_audio)
 
@@ -185,38 +146,23 @@ print(f"✓ Séparation terminée", flush=True)
     except Exception as e:
         print(f"❌ Erreur: {e}", flush=True)
         if separation_id:
-            progress_store[separation_id] = {
-                "status": "error",
-                "error": str(e),
-                "progress": 0,
-                "step": "Erreur"
-            }
+            progress_store[separation_id] = {"status": "error", "error": str(e), "progress": 0, "step": "Erreur"}
         return jsonify({"error": str(e)}), 500
 
 @app.route('/progress/<separation_id>', methods=['GET'])
 def get_progress(separation_id):
-    """Retourne le statut et les stems détectés"""
-    print(f"📥 GET /progress/{separation_id}", flush=True)
     if separation_id in progress_store:
-        print(f"✓ Trouvé: {progress_store[separation_id]}", flush=True)
         return jsonify(progress_store[separation_id]), 200
-    print(f"❌ Pas trouvé en mémoire", flush=True)
     return jsonify({"status": "not_found"}), 404
 
 @app.route('/stems/<separation_id>/<stem_name>.mp3', methods=['GET'])
 def get_stem(separation_id, stem_name):
-    """Télécharge un stem en MP3"""
     try:
-        mp3_path = os.path.join(UPLOAD_FOLDER, f"output_{separation_id}", "temp_audio", f"{stem_name}.mp3")
-        print(f"📥 GET /stems/{separation_id}/{stem_name}.mp3 → {mp3_path}", flush=True)
+        mp3_path = os.path.join(UPLOAD_FOLDER, f"output_{separation_id}", f"temp_{separation_id}", f"{stem_name}.mp3")
         if os.path.exists(mp3_path):
-            print(f"✓ Fichier trouvé", flush=True)
             return send_file(mp3_path, mimetype='audio/mpeg', as_attachment=False)
-        else:
-            print(f"❌ Fichier non trouvé", flush=True)
-            return jsonify({"error": "Fichier non trouvé"}), 404
+        return jsonify({"error": "Fichier non trouvé"}), 404
     except Exception as e:
-        print(f"❌ Erreur: {e}", flush=True)
         return jsonify({"error": str(e)}), 500
 
 if __name__ == '__main__':
