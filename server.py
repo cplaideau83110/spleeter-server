@@ -5,12 +5,12 @@ import json
 import logging
 import threading
 import time
+import subprocess
 from flask import Flask, request, jsonify, send_file
 from werkzeug.utils import secure_filename
 import requests
 from spleeter.separator import Separator
 import librosa
-import soundfile as sf
 from pathlib import Path
 import tempfile
 from flask_cors import CORS
@@ -130,9 +130,14 @@ def separate():
         for stem in detected_stems:
             wav_path = os.path.join(stems_dir, f"{stem}.wav")
             mp3_path = os.path.join(stems_dir, f"{stem}.mp3")
-            y, sr = librosa.load(wav_path, sr=None)
-            sf.write(mp3_path, y, sr, subtype='PCM_16')
-            print(f"   ✓ {stem}.mp3 créé", flush=True)
+
+            try:
+                subprocess.run([
+                    'ffmpeg', '-i', wav_path, '-q:a', '5', '-y', mp3_path
+                ], capture_output=True, check=True, timeout=300)
+                print(f"   ✓ {stem}.mp3 créé", flush=True)
+            except Exception as e:
+                print(f"   ❌ Erreur conversion {stem}: {e}", flush=True)
 
         progress_store[separation_id]["progress"] = 100
         progress_store[separation_id]["status"] = "done"
