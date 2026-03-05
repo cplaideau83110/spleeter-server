@@ -3,3 +3,4 @@ Flask-CORS==4.0.0
 requests==2.31.0
 spleeter==2.3.0
 pydub==0.25.1
+Werkzeug==2.3.0
