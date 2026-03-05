@@ -4,6 +4,8 @@ from flask import Flask, request, jsonify
 from flask_cors import CORS
 import threading
 from pathlib import Path
+import shutil
+import gc
 
 app = Flask(__name__)
 CORS(app, resources={r"/*": {"origins": "*"}})
@@ -55,6 +57,8 @@ def upload_stem_file(stem_path, filename):
         return None
 
 def process_separation(file_url, mode, separation_id):
+    local_path = None
+    output_dir = None
     try:
         print(f"\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
         print(f"🎵 Traitement: {separation_id}")
@@ -123,6 +127,18 @@ def process_separation(file_url, mode, separation_id):
         print(f"\n✗✗✗ ERREUR: {e}\n")
         set_progress(separation_id, 0, "Erreur")
         update_separation(separation_id, {"status": "error"})
+    
+    finally:
+        if local_path and os.path.exists(local_path):
+            os.remove(local_path)
+            print(f"🧹 Fichier entrée supprimé")
+        
+        if output_dir and os.path.exists(output_dir):
+            shutil.rmtree(output_dir)
+            print(f"🧹 Dossier sortie supprimé")
+        
+        gc.collect()
+        print(f"🧹 Mémoire libérée\n")
 
 @app.route("/separate", methods=["POST"])
 def separate():
