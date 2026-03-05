@@ -8,7 +8,7 @@ RUN pip install --no-cache-dir \
     protobuf==3.20.3 \
     click==7.1.2 \
     typer==0.3.2 \
-    werkzeug==2.2.3 \
+    werkzeug==1.0.1 \
     flask==1.1.4 \
     flask-cors==3.0.10 \
     requests \
