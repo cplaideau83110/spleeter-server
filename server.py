@@ -6,6 +6,7 @@ import threading
 from pathlib import Path
 import shutil
 import gc
+from pydub import AudioSegment
 
 app = Flask(__name__)
 CORS(app, resources={r"/*": {"origins": "*"}})
@@ -41,6 +42,19 @@ def update_separation(separation_id, data):
         print(f"✗ Erreur update Base44: {e}")
         return False
 
+def convert_wav_to_mp3(wav_path, mp3_path):
+    try:
+        print(f"    🔄 Conversion WAV → MP3...")
+        audio = AudioSegment.from_wav(wav_path)
+        audio.export(mp3_path, format="mp3", bitrate="192k")
+        wav_size = os.path.getsize(wav_path) / 1024 / 1024
+        mp3_size = os.path.getsize(mp3_path) / 1024 / 1024
+        print(f"    ✓ Converti: {wav_size:.1f}MB → {mp3_size:.1f}MB")
+        return True
+    except Exception as e:
+        print(f"    ✗ Erreur conversion: {e}")
+        return False
+
 def upload_stem_file(stem_path, filename):
     try:
         print(f"    🔍 Vérification: {stem_path}")
@@ -52,9 +66,9 @@ def upload_stem_file(stem_path, filename):
         print(f"    📦 Fichier: {file_size / 1024 / 1024:.1f} MB")
         
         with open(stem_path, 'rb') as f:
-            files = {'file': (filename, f, 'audio/wav')}
+            files = {'file': (filename, f, 'audio/mpeg')}
             url = f"{BASE44_API_URL}/{BASE44_APP_ID}/files/upload"
-            print(f"    🌐 URL: {url}")
+            print(f"    🌐 Upload...")
             response = requests.post(url, files=files, timeout=30)
             print(f"    📊 Status: {response.status_code}")
             response.raise_for_status()
@@ -95,9 +109,8 @@ def process_separation(file_url, mode, separation_id):
         separator = get_separator(stem_count)
         print(f"✓ Séparateur prêt ({stem_count} stems)\n")
         
-        # Check espace disque
         disk = shutil.disk_usage("/tmp")
-        print(f"📊 Espace disque /tmp: {disk.free / 1024 / 1024 / 1024:.2f} GB")
+        print(f"📊 Espace disque /tmp: {disk.free / 1024 / 1024 / 1024:.2f} GB\n")
         
         set_progress(separation_id, 35, "Séparation des instruments")
         print(f"🔊 Séparation en cours...")
@@ -106,25 +119,29 @@ def process_separation(file_url, mode, separation_id):
         print(f"✓ Séparation terminée\n")
         
         set_progress(separation_id, 70, "Récupération des pistes")
-        print(f"📂 Dossier output: {output_dir}")
+        print(f"📂 Dossier stems...")
         stems_dir = Path(output_dir) / Path(local_path).stem
-        print(f"📂 Dossier stems: {stems_dir}")
-        print(f"📂 Vérification: exists={stems_dir.exists()}")
-        
-        stems = {}
         stem_files = sorted(stems_dir.glob("*.wav"))
-        print(f"📂 Fichiers trouvés: {[f.name for f in stem_files]}")
         detected_stems = [f.stem for f in stem_files]
         print(f"✓ Trouvé: {', '.join(detected_stems)}\n")
         
-        set_progress(separation_id, 80, "Upload des pistes")
-        print(f"📤 Upload des fichiers...")
-        
+        set_progress(separation_id, 75, "Conversion en MP3")
+        print(f"🎚️ Conversion des pistes...")
+        mp3_files = {}
         for stem_file in stem_files:
             stem_name = stem_file.stem
-            filename = f"{separation_id}_{stem_name}.wav"
+            mp3_path = stem_file.with_suffix('.mp3')
+            if convert_wav_to_mp3(str(stem_file), str(mp3_path)):
+                mp3_files[stem_name] = mp3_path
+        print()
+        
+        set_progress(separation_id, 80, "Upload des pistes")
+        print(f"📤 Upload des fichiers MP3...")
+        stems = {}
+        for stem_name, mp3_path in mp3_files.items():
+            filename = f"{separation_id}_{stem_name}.mp3"
             print(f"  📤 Upload {filename}...")
-            file_url = upload_stem_file(str(stem_file), filename)
+            file_url = upload_stem_file(str(mp3_path), filename)
             if file_url:
                 stems[stem_name] = file_url
             else:
