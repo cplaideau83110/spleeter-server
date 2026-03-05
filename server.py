@@ -1,4 +1,6 @@
 import os
+os.environ['SPLEETER_MODELS_DIR'] = '/app/.spleeter'
+
 import json
 import logging
 from flask import Flask, request, jsonify, send_file
