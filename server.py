@@ -50,10 +50,10 @@ def upload_stem_file(stem_path, filename):
             response.raise_for_status()
             data = response.json()
             file_url = data.get('file_url')
-            print(f"  ✓ {filename}")
+            print(f"  ✓ URL: {file_url}")
             return file_url
     except Exception as e:
-        print(f"  ✗ {filename}: {e}")
+        print(f"  ✗ Échec upload {filename}: {e}")
         return None
 
 def process_separation(file_url, mode, separation_id):
@@ -90,25 +90,34 @@ def process_separation(file_url, mode, separation_id):
         print(f"✓ Séparation terminée\n")
         
         set_progress(separation_id, 70, "Récupération des pistes")
-        print(f"📂 Recherche des fichiers WAV...")
+        print(f"📂 Dossier output: {output_dir}")
         stems_dir = Path(output_dir) / Path(local_path).stem
+        print(f"📂 Dossier stems: {stems_dir}")
+        print(f"📂 Vérification: exists={stems_dir.exists()}")
+        
         stems = {}
         stem_files = sorted(stems_dir.glob("*.wav"))
+        print(f"📂 Fichiers trouvés: {[f.name for f in stem_files]}")
         detected_stems = [f.stem for f in stem_files]
         print(f"✓ Trouvé: {', '.join(detected_stems)}\n")
         
         set_progress(separation_id, 80, "Upload des pistes")
         print(f"📤 Upload des fichiers...")
+        
         for stem_file in stem_files:
             stem_name = stem_file.stem
             filename = f"{separation_id}_{stem_name}.wav"
+            print(f"  📤 Upload {filename}...")
             file_url = upload_stem_file(str(stem_file), filename)
             if file_url:
                 stems[stem_name] = file_url
+            else:
+                print(f"  ✗ Échec upload {filename}")
         
         if not stems:
+            print(f"❌ Aucun stem uploadé!")
             raise Exception("Aucun stem uploadé")
-        print(f"✓ Upload terminé\n")
+        print(f"✓ Upload terminé ({len(stems)} pistes)\n")
         
         set_progress(separation_id, 90, "Finalisation")
         print(f"💾 Enregistrement en base...")
