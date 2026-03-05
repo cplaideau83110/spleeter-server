@@ -9,7 +9,7 @@ RUN pip install --no-cache-dir \
     tensorflow==2.12.0 \
     werkzeug==2.2.3 \
     flask==2.2.5 \
-    flask-cors==4.0.0 \
+    flask-cors==3.0.10 \
     requests \
     spleeter
 
