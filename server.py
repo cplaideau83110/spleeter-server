@@ -42,10 +42,30 @@ except Exception as e:
 print("✅ Tous les modèles prêts!", flush=True)
 
 UPLOAD_FOLDER = tempfile.gettempdir()
+PROGRESS_FILE = os.path.join(UPLOAD_FOLDER, 'progress_store.json')
 app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
 app.config['MAX_CONTENT_LENGTH'] = 500 * 1024 * 1024
 
-progress_store = {}
+# Charge le fichier de progression existant au démarrage
+def load_progress_store():
+    if os.path.exists(PROGRESS_FILE):
+        try:
+            with open(PROGRESS_FILE, 'r') as f:
+                return json.load(f)
+        except Exception as e:
+            print(f"⚠️ Erreur chargement progress_store.json: {e}", flush=True)
+    return {}
+
+# Sauvegarde le fichier de progression
+def save_progress_store():
+    try:
+        with open(PROGRESS_FILE, 'w') as f:
+            json.dump(progress_store, f)
+    except Exception as e:
+        print(f"⚠️ Erreur sauvegarde progress_store.json: {e}", flush=True)
+
+progress_store = load_progress_store()
+print(f"📂 {len(progress_store)} séparations chargées depuis le disque", flush=True)
 
 logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger(__name__)
@@ -55,8 +75,9 @@ def set_progress(separation_id, progress, step=""):
         "progress": progress,
         "step": step,
         "status": "processing",
-        "detected_stems": []
+        "detected_stems": progress_store.get(separation_id, {}).get("detected_stems", [])
     }
+    save_progress_store()
     print(f"📊 {separation_id}: {progress}% - {step}", flush=True)
 
 def get_separator(stems):
@@ -146,6 +167,7 @@ def separate():
 
         progress_store[separation_id]["progress"] = 100
         progress_store[separation_id]["status"] = "done"
+        save_progress_store()
         print(f"✓ Séparation #{separation_id} complète!", flush=True)
 
         if os.path.exists(temp_audio):
@@ -156,7 +178,8 @@ def separate():
     except Exception as e:
         print(f"❌ Erreur: {e}", flush=True)
         if separation_id:
-            progress_store[separation_id] = {"status": "error", "error": str(e), "progress": 0, "step": "Erreur"}
+            progress_store[separation_id] = {"status": "error", "error": str(e), "progress": 0, "step": "Erreur", "detected_stems": []}
+            save_progress_store()
         return jsonify({"error": str(e)}), 500
 
 @app.route('/progress/<separation_id>', methods=['GET'])
