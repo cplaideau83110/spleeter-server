@@ -47,7 +47,7 @@ def upload_to_base44(file_path, filename):
 def update_separation_in_base44(separation_id, update_data):
     """Met à jour une entité Separation dans Base44"""
     url = f"https://base44.app/api/apps/{BASE44_APP_ID}/entities/Separation/{separation_id}"
-    response = requests.patch(
+    response = requests.put(
         url,
         json=update_data,
         headers={
