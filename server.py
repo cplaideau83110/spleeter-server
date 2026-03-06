@@ -14,11 +14,11 @@ CORS(app)
 BASE44_APP_ID = "69a8f857a6a0fa216be33357"
 BASE44_API_KEY = "cafa03f1b09c4e3d9aee529253d3478c"
 
+# URL de la fonction proxy d'upload Base44
+UPLOAD_PROXY_URL = f"https://app.base44.app/api/apps/{BASE44_APP_ID}/functions/uploadStemProxy"
+
 # Stockage des progressions en mémoire
 progress_store = {}
-
-# Cache du séparateur Spleeter
-separator_cache = {}
 
 def download_file(url, dest_path):
     """Télécharge un fichier depuis une URL (suit les redirections)"""
@@ -30,15 +30,15 @@ def download_file(url, dest_path):
     size_mb = os.path.getsize(dest_path) / (1024 * 1024)
     print(f"✓ Fichier téléchargé: {size_mb:.1f} MB")
     return dest_path
+
 def upload_to_base44(file_path, filename):
-    """Upload un fichier vers Base44 et retourne l'URL publique"""
-    url = f"https://api.base44.app/api/apps/{BASE44_APP_ID}/integrations/invoke"
+    """Upload un fichier via la fonction proxy Base44"""
     with open(file_path, 'rb') as f:
         response = requests.post(
-            url,
-            data={"integration_name": "Core", "method_name": "UploadFile"},
+            UPLOAD_PROXY_URL,
             files={"file": (filename, f, "audio/mpeg")},
-            headers={"api-key": BASE44_API_KEY}
+            headers={"api-key": BASE44_API_KEY},
+            timeout=120
         )
     print(f"Upload response: {response.status_code} - {response.text[:200]}")
     response.raise_for_status()
@@ -60,6 +60,13 @@ def update_separation_in_base44(separation_id, update_data):
     response.raise_for_status()
     return response.json()
 
+def get_separator(n_stems):
+    """Retourne un séparateur Spleeter (sans cache pour éviter les corruptions)"""
+    from spleeter.separator import Separator
+    spleeter_model = f"spleeter:{n_stems}stems"
+    print(f"🔄 Chargement du séparateur {spleeter_model}...")
+    return Separator(spleeter_model)
+
 def process_separation(separation_id, file_url, mode):
     """Traitement principal de la séparation audio"""
     tmp_dir = f"/tmp/output_{separation_id}"
@@ -77,23 +84,9 @@ def process_separation(separation_id, file_url, mode):
         progress_store[separation_id]["step"] = "Analyse de la piste audio"
         print(f"📊 {separation_id}: 15% - Analyse de la piste audio")
 
-        from spleeter.separator import Separator
-
-        stems_map = {
-            "2stems": 2,
-            "4stems": 4,
-            "5stems": 5,
-        }
+        stems_map = {"2stems": 2, "4stems": 4, "5stems": 5}
         n_stems = stems_map.get(mode, 4)
-        spleeter_model = f"spleeter:{n_stems}stems"
-
-        if spleeter_model not in separator_cache:
-            separator_cache[spleeter_model] = Separator(spleeter_model)
-            print(f"✓ Séparateur {n_stems}stems chargé")
-        else:
-            print(f"✓ Séparateur {n_stems}stems utilisé depuis le cache")
-
-        separator = separator_cache[spleeter_model]
+        separator = get_separator(n_stems)
         print(f"✓ Séparateur prêt ({n_stems} stems)")
 
         # 3. Séparation
