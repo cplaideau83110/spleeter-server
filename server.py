@@ -12,7 +12,7 @@ CORS(app)
 
 # Config Base44
 BASE44_APP_ID = "69a8f857a6a0fa216be33357"
-BASE44_API_KEY = os.environ.get("BASE44_API_KEY")  # À définir dans Railway
+BASE44_API_KEY = "cafa03f1b09c4e3d9aee529253d3478c"
 
 # Stockage des progressions en mémoire
 progress_store = {}
@@ -33,28 +33,30 @@ def download_file(url, dest_path):
 
 def upload_to_base44(file_path, filename):
     """Upload un fichier vers Base44 et retourne l'URL publique"""
-    url = f"https://base44.app/api/apps/{BASE44_APP_ID}/integrations/Core/UploadFile"
+    url = f"https://api.base44.app/api/apps/{BASE44_APP_ID}/integrations/Core/UploadFile"
     with open(file_path, 'rb') as f:
         response = requests.post(
             url,
             files={"file": (filename, f, "audio/mpeg")},
-            headers={"Authorization": f"Bearer {BASE44_API_KEY}"}
+            headers={"api-key": BASE44_API_KEY}
         )
+    print(f"Upload response: {response.status_code} - {response.text[:200]}")
     response.raise_for_status()
     data = response.json()
     return data["file_url"]
 
 def update_separation_in_base44(separation_id, update_data):
     """Met à jour une entité Separation dans Base44"""
-    url = f"https://base44.app/api/apps/{BASE44_APP_ID}/entities/Separation/{separation_id}"
+    url = f"https://api.base44.app/api/apps/{BASE44_APP_ID}/entities/Separation/{separation_id}"
     response = requests.put(
         url,
         json=update_data,
         headers={
-            "Authorization": f"Bearer {BASE44_API_KEY}",
+            "api-key": BASE44_API_KEY,
             "Content-Type": "application/json"
         }
     )
+    print(f"Update response: {response.status_code} - {response.text}")
     response.raise_for_status()
     return response.json()
 
@@ -107,7 +109,13 @@ def process_separation(separation_id, file_url, mode):
         print("✓ Séparation terminée")
 
         # 4. Détection des stems
-        wav_files = [f for f in os.listdir(output_dir) if f.endswith(".wav")]
+        stem_subdir = os.path.join(output_dir, "input")
+        if os.path.exists(stem_subdir):
+            wav_files = [f for f in os.listdir(stem_subdir) if f.endswith(".wav")]
+        else:
+            wav_files = [f for f in os.listdir(output_dir) if f.endswith(".wav")]
+            stem_subdir = output_dir
+
         detected_stems = [os.path.splitext(f)[0] for f in wav_files]
         print(f"✓ Stems détectés: {detected_stems}")
 
@@ -120,8 +128,8 @@ def process_separation(separation_id, file_url, mode):
 
         mp3_paths = {}
         for stem_name in detected_stems:
-            wav_path = f"{output_dir}/{stem_name}.wav"
-            mp3_path = f"{output_dir}/{stem_name}.mp3"
+            wav_path = f"{stem_subdir}/{stem_name}.wav"
+            mp3_path = f"{tmp_dir}/{stem_name}.mp3"
             subprocess.run(
                 ["ffmpeg", "-y", "-i", wav_path, "-codec:a", "libmp3lame", "-qscale:a", "2", mp3_path],
                 check=True, capture_output=True
@@ -168,7 +176,6 @@ def process_separation(separation_id, file_url, mode):
             pass
 
     finally:
-        # Nettoyage des fichiers temporaires
         import shutil
         if os.path.exists(tmp_dir):
             shutil.rmtree(tmp_dir)
