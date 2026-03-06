@@ -30,13 +30,13 @@ def download_file(url, dest_path):
     size_mb = os.path.getsize(dest_path) / (1024 * 1024)
     print(f"✓ Fichier téléchargé: {size_mb:.1f} MB")
     return dest_path
-
 def upload_to_base44(file_path, filename):
     """Upload un fichier vers Base44 et retourne l'URL publique"""
-    url = f"https://api.base44.app/api/apps/{BASE44_APP_ID}/integrations/Core/UploadFile"
+    url = f"https://api.base44.app/api/apps/{BASE44_APP_ID}/integrations/invoke"
     with open(file_path, 'rb') as f:
         response = requests.post(
             url,
+            data={"integration_name": "Core", "method_name": "UploadFile"},
             files={"file": (filename, f, "audio/mpeg")},
             headers={"api-key": BASE44_API_KEY}
         )
