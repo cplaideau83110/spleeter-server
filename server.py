@@ -2,10 +2,8 @@ from flask import Flask, request, jsonify, send_file
 from flask_cors import CORS
 import threading
 import os
-import uuid
 import requests
 import subprocess
-import json
 
 app = Flask(__name__)
 CORS(app)
@@ -14,14 +12,13 @@ CORS(app)
 BASE44_APP_ID = "69a8f857a6a0fa216be33357"
 BASE44_API_KEY = "cafa03f1b09c4e3d9aee529253d3478c"
 
-# URL de la fonction proxy d'upload Base44
 UPLOAD_PROXY_URL = f"https://app.base44.app/api/apps/{BASE44_APP_ID}/functions/uploadStemProxy"
+UPDATE_PROXY_URL = f"https://app.base44.app/api/apps/{BASE44_APP_ID}/functions/updateSeparation"
 
 # Stockage des progressions en mémoire
 progress_store = {}
 
 def download_file(url, dest_path):
-    """Télécharge un fichier depuis une URL (suit les redirections)"""
     response = requests.get(url, stream=True, allow_redirects=True)
     response.raise_for_status()
     with open(dest_path, 'wb') as f:
@@ -32,7 +29,6 @@ def download_file(url, dest_path):
     return dest_path
 
 def upload_to_base44(file_path, filename):
-    """Upload un fichier via la fonction proxy Base44"""
     with open(file_path, 'rb') as f:
         response = requests.post(
             UPLOAD_PROXY_URL,
@@ -42,20 +38,13 @@ def upload_to_base44(file_path, filename):
         )
     print(f"Upload response: {response.status_code} - {response.text[:200]}")
     response.raise_for_status()
-    data = response.json()
-    return data["file_url"]
-
-UPDATE_PROXY_URL = f"https://app.base44.app/api/apps/{BASE44_APP_ID}/functions/updateSeparation"
+    return response.json()["file_url"]
 
 def update_separation_in_base44(separation_id, update_data):
-    """Met à jour une entité Separation via la fonction proxy Base44"""
     response = requests.post(
         UPDATE_PROXY_URL,
         json={"separation_id": separation_id, "update_data": update_data},
-        headers={
-            "api-key": BASE44_API_KEY,
-            "Content-Type": "application/json"
-        },
+        headers={"api-key": BASE44_API_KEY, "Content-Type": "application/json"},
         timeout=30
     )
     print(f"Update response: {response.status_code} - {response.text[:200]}")
@@ -63,14 +52,12 @@ def update_separation_in_base44(separation_id, update_data):
     return response.json()
 
 def get_separator(n_stems):
-    """Retourne un séparateur Spleeter (sans cache pour éviter les corruptions)"""
     from spleeter.separator import Separator
     spleeter_model = f"spleeter:{n_stems}stems"
     print(f"🔄 Chargement du séparateur {spleeter_model}...")
     return Separator(spleeter_model)
 
 def process_separation(separation_id, file_url, mode):
-    """Traitement principal de la séparation audio"""
     tmp_dir = f"/tmp/output_{separation_id}"
     os.makedirs(tmp_dir, exist_ok=True)
     input_path = f"{tmp_dir}/input.mp3"
@@ -105,8 +92,11 @@ def process_separation(separation_id, file_url, mode):
 
         # 4. Détection des stems
         stem_subdir = os.path.join(output_dir, "input")
+        print(f"🔍 Recherche stems dans: {stem_subdir}")
+        print(f"🔍 Contenu output_dir: {os.listdir(output_dir)}")
         if os.path.exists(stem_subdir):
             wav_files = [f for f in os.listdir(stem_subdir) if f.endswith(".wav")]
+            print(f"🔍 Contenu stem_subdir: {os.listdir(stem_subdir)}")
         else:
             wav_files = [f for f in os.listdir(output_dir) if f.endswith(".wav")]
             stem_subdir = output_dir
@@ -139,12 +129,12 @@ def process_separation(separation_id, file_url, mode):
 
         stem_urls = {}
         for stem_name, mp3_path in mp3_paths.items():
-            print(f"   ⬆️ Upload {stem_name}.mp3 vers Base44...")
+            print(f"   ⬆️ Upload {stem_name}.mp3...")
             url = upload_to_base44(mp3_path, f"{stem_name}.mp3")
             stem_urls[stem_name] = url
             print(f"   ✓ {stem_name} uploadé: {url}")
 
-        # 7. Mise à jour Base44 avec les URLs permanentes
+        # 7. Mise à jour Base44
         progress_store[separation_id]["progress"] = 95
         progress_store[separation_id]["step"] = "Finalisation"
         print(f"📊 {separation_id}: 95% - Finalisation")
@@ -164,6 +154,8 @@ def process_separation(separation_id, file_url, mode):
 
     except Exception as e:
         print(f"❌ Erreur séparation {separation_id}: {e}")
+        import traceback
+        traceback.print_exc()
         progress_store[separation_id] = {"status": "error", "progress": 0, "step": str(e), "detected_stems": []}
         try:
             update_separation_in_base44(separation_id, {"status": "error"})
