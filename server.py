@@ -45,18 +45,20 @@ def upload_to_base44(file_path, filename):
     data = response.json()
     return data["file_url"]
 
+UPDATE_PROXY_URL = f"https://app.base44.app/api/apps/{BASE44_APP_ID}/functions/updateSeparation"
+
 def update_separation_in_base44(separation_id, update_data):
-    """Met à jour une entité Separation dans Base44"""
-    url = f"https://api.base44.app/api/apps/{BASE44_APP_ID}/entities/Separation/{separation_id}"
-    response = requests.put(
-        url,
-        json=update_data,
+    """Met à jour une entité Separation via la fonction proxy Base44"""
+    response = requests.post(
+        UPDATE_PROXY_URL,
+        json={"separation_id": separation_id, "update_data": update_data},
         headers={
             "api-key": BASE44_API_KEY,
             "Content-Type": "application/json"
-        }
+        },
+        timeout=30
     )
-    print(f"Update response: {response.status_code} - {response.text}")
+    print(f"Update response: {response.status_code} - {response.text[:200]}")
     response.raise_for_status()
     return response.json()
 
